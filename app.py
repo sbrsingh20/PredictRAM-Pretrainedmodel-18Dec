@@ -1,85 +1,94 @@
-import streamlit as st
 import pandas as pd
-import joblib
-import numpy as np
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression
 from sklearn.utils.validation import check_is_fitted
-import traceback
 
-# Title of the Streamlit app
-st.title("Stock Return Prediction App")
-
-# File uploader for the .pkl file
-uploaded_file = st.file_uploader("Upload the PKL file containing stock models", type="pkl")
-
-if uploaded_file:
+# Function to load stock data
+def load_stock_data(file_path):
+    """Loads stock data from an Excel file."""
     try:
-        # Load the .pkl file and handle compatibility issues
-        try:
-            all_models = joblib.load(uploaded_file)
-        except Exception as e:
-            st.warning("Model loading encountered an issue. Attempting safe loading...")
-            all_models = joblib.load(uploaded_file, safe=False)
-
-        st.success("PKL file successfully loaded!")
-
-        # Display the content of the .pkl file
-        st.subheader("Available Stocks in the Model")
-        stocks = list(all_models.keys())
-        st.write(stocks)
-
-        # Allow user to select multiple stocks
-        selected_stocks = st.multiselect("Select Stocks for Prediction", stocks)
-
-        if selected_stocks:
-            # Input fields for GDP, Inflation, Interest Rate, and VIX
-            st.subheader("Enter Economic Indicators")
-            gdp = st.number_input("GDP:", value=0.0, step=0.1)
-            inflation = st.number_input("Inflation:", value=0.0, step=0.1)
-            interest_rate = st.number_input("Interest Rate:", value=0.0, step=0.1)
-            vix = st.number_input("VIX:", value=0.0, step=0.1)
-
-            if st.button("Predict Stock Returns"):
-                # Prepare the input data for prediction
-                input_data = pd.DataFrame({
-                    'GDP': [gdp],
-                    'Inflation': [inflation],
-                    'Interest Rate': [interest_rate],
-                    'VIX': [vix]
-                })
-
-                # Predict returns for each selected stock
-                predictions = {}
-                for stock in selected_stocks:
-                    try:
-                        # Extract the model for the stock
-                        model = all_models[stock]['model']
-
-                        # Check if the model is fitted
-                        try:
-                            check_is_fitted(model)
-                        except AttributeError:
-                            # Ignore sklearn_tags error
-                            pass
-
-                        # Attempt prediction
-                        predicted_return = model.predict(input_data)[0]
-                        predictions[stock] = predicted_return
-                    except Exception as e:
-                        # Capture and log detailed error
-                        error_details = traceback.format_exc()
-                        st.error(f"Error processing stock {stock}: {repr(e)}")
-                        st.text(f"Details:\n{error_details}")
-                        predictions[stock] = f"Error: {e}"
-
-                # Display the predictions
-                st.subheader("Predicted Stock Returns")
-                for stock, return_value in predictions.items():
-                    if isinstance(return_value, (int, float)):
-                        st.write(f"{stock}: {return_value:.4%}")
-                    else:
-                        st.write(f"{stock}: {return_value}")
+        data = pd.read_excel(file_path)
+        return data
     except Exception as e:
-        st.error(f"Error loading PKL file: {e}")
-        st.text(f"Details:\n{traceback.format_exc()}")
-else:
-    st.info("Please upload the PKL file to proceed.")
+        print(f"Error loading file {file_path}: {e}")
+        return None
+
+# Function to preprocess input data
+def preprocess_data(data, target_column):
+    """
+    Preprocess the stock data.
+    :param data: DataFrame containing stock data
+    :param target_column: Column to predict
+    :return: X (features), y (target)
+    """
+    try:
+        y = data[target_column]
+        X = data.drop(columns=[target_column])
+        return X, y
+    except KeyError as e:
+        print(f"Target column {target_column} not found: {e}")
+        return None, None
+
+# Define the pipeline
+def create_pipeline():
+    """Creates a Scikit-learn pipeline with preprocessing and a regression model."""
+    pipeline = Pipeline([
+        ('scaler', StandardScaler()),  # Standardize the features
+        ('regressor', LinearRegression())  # Linear Regression model
+    ])
+    return pipeline
+
+# Main function to process stock data and predict
+def process_stock(file_path, target_column):
+    """Processes stock data and makes predictions."""
+    data = load_stock_data(file_path)
+    if data is None:
+        return f"Error: Could not load file {file_path}"
+
+    X, y = preprocess_data(data, target_column)
+    if X is None or y is None:
+        return f"Error: Invalid data in {file_path}"
+
+    # Split data into train and test sets
+    train_size = int(len(X) * 0.8)
+    X_train, X_test = X[:train_size], X[train_size:]
+    y_train, y_test = y[:train_size], y[train_size:]
+
+    # Create and fit the pipeline
+    pipeline = create_pipeline()
+    pipeline.fit(X_train, y_train)
+
+    # Ensure the pipeline is fitted
+    try:
+        check_is_fitted(pipeline)
+    except Exception as e:
+        return f"Error: Pipeline not fitted for {file_path}. Details: {e}"
+
+    # Make predictions
+    try:
+        predictions = pipeline.predict(X_test)
+        print(f"Predictions for {file_path}: {predictions}")
+        return predictions
+    except Exception as e:
+        return f"Error predicting for {file_path}. Details: {e}"
+
+# Process multiple stock files
+def process_multiple_stocks(file_paths, target_column):
+    """Processes multiple stock files."""
+    for file_path in file_paths:
+        result = process_stock(file_path, target_column)
+        print(f"{file_path}: {result}")
+
+# Example usage
+if __name__ == "__main__":
+    # List of stock files
+    stock_files = [
+        "AJANTPHARM.xlsx",
+        "AUBANK.xlsx"
+    ]
+    # Target column to predict
+    target_column = "Close_Price"  # Replace with your actual target column name
+
+    # Process all stocks
+    process_multiple_stocks(stock_files, target_column)
