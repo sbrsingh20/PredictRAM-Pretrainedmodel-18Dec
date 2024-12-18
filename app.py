@@ -1,94 +1,98 @@
+import streamlit as st
+import pickle
 import pandas as pd
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression
-from sklearn.utils.validation import check_is_fitted
+import numpy as np
 
-# Function to load stock data
-def load_stock_data(file_path):
-    """Loads stock data from an Excel file."""
+def load_model(file):
+    """Load the uploaded pickle file."""
     try:
-        data = pd.read_excel(file_path)
-        return data
+        model = pickle.load(file)
+        return model
     except Exception as e:
-        print(f"Error loading file {file_path}: {e}")
+        st.error(f"Error loading model: {e}")
         return None
 
-# Function to preprocess input data
-def preprocess_data(data, target_column):
+def predict_returns(model, selected_stocks, gdp, inflation, interest_rate, vix):
     """
-    Preprocess the stock data.
-    :param data: DataFrame containing stock data
-    :param target_column: Column to predict
-    :return: X (features), y (target)
+    Predict stock returns based on user inputs and selected stocks.
+    :param model: The pre-trained model
+    :param selected_stocks: List of selected stocks
+    :param gdp: GDP value
+    :param inflation: Inflation value
+    :param interest_rate: Interest Rate value
+    :param vix: VIX value
+    :return: DataFrame with predictions for selected stocks
     """
     try:
-        y = data[target_column]
-        X = data.drop(columns=[target_column])
-        return X, y
-    except KeyError as e:
-        print(f"Target column {target_column} not found: {e}")
-        return None, None
+        # Create input data for prediction
+        input_data = pd.DataFrame({
+            'Stock': selected_stocks,
+            'GDP': [gdp] * len(selected_stocks),
+            'Inflation': [inflation] * len(selected_stocks),
+            'Interest_Rate': [interest_rate] * len(selected_stocks),
+            'VIX': [vix] * len(selected_stocks)
+        })
 
-# Define the pipeline
-def create_pipeline():
-    """Creates a Scikit-learn pipeline with preprocessing and a regression model."""
-    pipeline = Pipeline([
-        ('scaler', StandardScaler()),  # Standardize the features
-        ('regressor', LinearRegression())  # Linear Regression model
-    ])
-    return pipeline
+        # Ensure the model supports prediction
+        if not hasattr(model, "predict"):
+            st.error("The uploaded model does not support prediction.")
+            return None
 
-# Main function to process stock data and predict
-def process_stock(file_path, target_column):
-    """Processes stock data and makes predictions."""
-    data = load_stock_data(file_path)
-    if data is None:
-        return f"Error: Could not load file {file_path}"
+        # Make predictions
+        input_features = input_data.drop(columns=['Stock'])
+        predictions = model.predict(input_features)
 
-    X, y = preprocess_data(data, target_column)
-    if X is None or y is None:
-        return f"Error: Invalid data in {file_path}"
+        # Add predictions to the DataFrame
+        input_data['Predicted_Return'] = predictions
+        return input_data
 
-    # Split data into train and test sets
-    train_size = int(len(X) * 0.8)
-    X_train, X_test = X[:train_size], X[train_size:]
-    y_train, y_test = y[:train_size], y[train_size:]
-
-    # Create and fit the pipeline
-    pipeline = create_pipeline()
-    pipeline.fit(X_train, y_train)
-
-    # Ensure the pipeline is fitted
-    try:
-        check_is_fitted(pipeline)
     except Exception as e:
-        return f"Error: Pipeline not fitted for {file_path}. Details: {e}"
+        st.error(f"Error during prediction: {e}")
+        return None
 
-    # Make predictions
-    try:
-        predictions = pipeline.predict(X_test)
-        print(f"Predictions for {file_path}: {predictions}")
-        return predictions
-    except Exception as e:
-        return f"Error predicting for {file_path}. Details: {e}"
+# Streamlit App
+st.title("Stock Return Predictor")
 
-# Process multiple stock files
-def process_multiple_stocks(file_paths, target_column):
-    """Processes multiple stock files."""
-    for file_path in file_paths:
-        result = process_stock(file_path, target_column)
-        print(f"{file_path}: {result}")
+# Step 1: Upload the pickle file
+st.header("Step 1: Upload Model File (.pkl)")
+uploaded_file = st.file_uploader("Upload your trained model (.pkl)", type="pkl")
 
-# Example usage
-if __name__ == "__main__":
-    # List of stock files
-    stock_files = [
-        "AJANTPHARM.xlsx",
-        "AUBANK.xlsx"
-    ]
-    # Target column to predict
-    target_column = "Close_Price"  # Replace with your actual target column name
+if uploaded_file:
+    model = load_model(uploaded_file)
 
-    # Process all stocks
-    process_multiple_stocks(stock_files, target_column)
+    if model:
+        st.success("Model loaded successfully!")
+        st.write("Model Content (attributes and methods):")
+        st.write(dir(model))
+
+        # Step 2: Allow user to select stocks
+        st.header("Step 2: Select Stocks")
+        stock_list = [
+            "AJANTPHARM", "AUBANK", "TCS", "INFY", "RELIANCE", "HDFCBANK", "ITC", "ONGC"
+        ]  # Replace with dynamic stock names if needed
+        selected_stocks = st.multiselect("Select stocks to predict returns:", stock_list)
+
+        if selected_stocks:
+            # Step 3: Input macroeconomic parameters
+            st.header("Step 3: Input Macroeconomic Parameters")
+            gdp = st.number_input("GDP (in %):", min_value=-100.0, max_value=100.0, value=2.5)
+            inflation = st.number_input("Inflation (in %):", min_value=-100.0, max_value=100.0, value=5.0)
+            interest_rate = st.number_input("Interest Rate (in %):", min_value=-100.0, max_value=100.0, value=4.0)
+            vix = st.number_input("VIX (Volatility Index):", min_value=0.0, max_value=100.0, value=20.0)
+
+            # Step 4: Predict and display results
+            if st.button("Predict Stock Returns"):
+                results = predict_returns(model, selected_stocks, gdp, inflation, interest_rate, vix)
+
+                if results is not None:
+                    st.header("Prediction Results")
+                    st.dataframe(results)
+
+                    # Option to download predictions
+                    csv = results.to_csv(index=False)
+                    st.download_button(
+                        label="Download Predictions as CSV",
+                        data=csv,
+                        file_name="predicted_stock_returns.csv",
+                        mime="text/csv"
+                    )
