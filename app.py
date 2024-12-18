@@ -13,29 +13,39 @@ if uploaded_file is not None:
     try:
         # Load the model or data from the .pkl file
         model_data = pickle.load(uploaded_file)
-        
-        # Display the contents of the loaded file
+
+        # Display the contents of the loaded file to check its structure
         st.success("File loaded successfully!")
         
-        # Show the keys of the loaded dictionary (stocks)
-        stock_names = list(model_data.keys())
-        st.write("Available Stocks in the Model:")
-        st.write(stock_names)
+        # Check if the model data is a dictionary containing stock names and models
+        if isinstance(model_data, dict) and all(key in model_data for key in ['model', 'evaluation']):
+            # Show the keys of the loaded dictionary (stocks)
+            stock_names = list(model_data.keys())
+            st.write("Available Stocks in the Model:")
+            st.write(stock_names)
+            
+            # Get the model and evaluation metrics for each stock
+            stock_models = {stock: model_data[stock]['model'] for stock in stock_names}
+            stock_evaluations = {stock: model_data[stock]['evaluation'] for stock in stock_names}
+            
+            # Show evaluation metrics for each stock
+            st.write("Model Evaluation Metrics:")
+            for stock, evaluation in stock_evaluations.items():
+                st.write(f"**{stock}:**")
+                st.write(f"  - Model Type: {evaluation['model_type']}")
+                st.write(f"  - R2 Score: {evaluation['r2_score']}")
+                st.write(f"  - Mean Squared Error: {evaluation['mean_squared_error']}")
+                st.write(f"  - Accuracy: {evaluation['accuracy']}")
+                st.write("---")
         
-        # Get the model and evaluation metrics for each stock
-        stock_models = {stock: model_data[stock]['model'] for stock in stock_names}
-        stock_evaluations = {stock: model_data[stock]['evaluation'] for stock in stock_names}
-        
-        # Show evaluation metrics for each stock
-        st.write("Model Evaluation Metrics:")
-        for stock, evaluation in stock_evaluations.items():
-            st.write(f"**{stock}:**")
-            st.write(f"  - Model Type: {evaluation['model_type']}")
-            st.write(f"  - R2 Score: {evaluation['r2_score']}")
-            st.write(f"  - Mean Squared Error: {evaluation['mean_squared_error']}")
-            st.write(f"  - Accuracy: {evaluation['accuracy']}")
-            st.write("---")
-        
+        elif isinstance(model_data, np.ndarray):
+            # Handle the case where the .pkl file contains a numpy array
+            st.warning("The uploaded .pkl file contains a numpy array, not the expected model dictionary.")
+            st.write("Please check the file format or upload the correct model file.")
+            
+        else:
+            st.warning("The uploaded file does not contain the expected model dictionary format.")
+
     except Exception as e:
         st.error(f"Error loading file: {e}")
 else:
