@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 
 # Streamlit App Title
-st.title("Stock Return Predictor")
+st.title("Stock Return Prediction Application")
 
 # Step 1: Upload Model File (.pkl)
 uploaded_file = st.file_uploader("Upload your trained model file (.pkl):", type=["pkl"])
@@ -14,35 +14,38 @@ if uploaded_file is not None:
         # Load the model or data from the .pkl file
         model_data = pickle.load(uploaded_file)
         
-        # Check if the loaded object is a trained model
-        if hasattr(model_data, 'predict'):
-            model = model_data
-            st.success("Model loaded successfully!")
-            st.write("Model Details:")
-            st.write(model)
-        else:
-            # If it's not a model, assume it's stock data or other data
-            model = None
-            st.warning("The file doesn't contain a model, displaying data instead.")
-            st.write("Data in the file:")
-            st.write(model_data)
-            
-            # If it's a DataFrame or similar, show the accuracy (if applicable)
-            if isinstance(model_data, pd.DataFrame):
-                st.write("Displaying stock data available in the .pkl file:")
-                st.dataframe(model_data)
+        # Display the contents of the loaded file
+        st.success("File loaded successfully!")
+        
+        # Show the keys of the loaded dictionary (stocks)
+        stock_names = list(model_data.keys())
+        st.write("Available Stocks in the Model:")
+        st.write(stock_names)
+        
+        # Get the model and evaluation metrics for each stock
+        stock_models = {stock: model_data[stock]['model'] for stock in stock_names}
+        stock_evaluations = {stock: model_data[stock]['evaluation'] for stock in stock_names}
+        
+        # Show evaluation metrics for each stock
+        st.write("Model Evaluation Metrics:")
+        for stock, evaluation in stock_evaluations.items():
+            st.write(f"**{stock}:**")
+            st.write(f"  - Model Type: {evaluation['model_type']}")
+            st.write(f"  - R2 Score: {evaluation['r2_score']}")
+            st.write(f"  - Mean Squared Error: {evaluation['mean_squared_error']}")
+            st.write(f"  - Accuracy: {evaluation['accuracy']}")
+            st.write("---")
+        
     except Exception as e:
         st.error(f"Error loading file: {e}")
-        model = None
 else:
     st.warning("Please upload a valid .pkl file to proceed.")
 
 # Step 2: Prediction Flow
-if model is not None:
+if 'stock_models' in locals():
     # Step 3: User selects stocks
-    st.header("Stock Selection")
-    stock_options = ["Stock A", "Stock B", "Stock C", "Stock D", "Stock E"]
-    selected_stocks = st.multiselect("Select stocks to predict returns for:", stock_options)
+    st.header("Select Stocks for Prediction")
+    selected_stocks = st.multiselect("Select stocks to predict returns for:", stock_names)
 
     # Step 4: User inputs for macroeconomic indicators
     st.header("Input Macroeconomic Indicators")
@@ -72,12 +75,13 @@ if model is not None:
                 # Predict for each selected stock
                 st.header("Predicted Stock Returns")
                 for stock in selected_stocks:
-                    # Check if the model is callable
+                    # Check if the model is callable and make predictions
+                    model = stock_models[stock]
                     if hasattr(model, 'predict'):
                         predicted_return = model.predict(input_data)[0]  # Adjust index if model outputs more
                         st.write(f"{stock}: Predicted Return: {predicted_return:.2f}%")
                     else:
-                        st.warning("Model does not have a predict method.")
+                        st.warning(f"Model for {stock} does not have a predict method.")
             except Exception as e:
                 st.error(f"Prediction failed: {e}")
 else:
