@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import joblib
 import numpy as np
+from sklearn.utils.validation import check_is_fitted
 import traceback
 
 # Title of the Streamlit app
@@ -11,9 +12,8 @@ st.title("Stock Return Prediction App")
 uploaded_file = st.file_uploader("Upload the PKL file containing stock models", type="pkl")
 
 if uploaded_file:
-    # Load the .pkl file
     try:
-        # Try loading the PKL file and handle version mismatch errors
+        # Load the .pkl file and handle compatibility issues
         try:
             all_models = joblib.load(uploaded_file)
         except Exception as e:
@@ -53,7 +53,14 @@ if uploaded_file:
                     try:
                         # Extract the model for the stock
                         model = all_models[stock]['model']
-                        
+
+                        # Check if the model is fitted
+                        try:
+                            check_is_fitted(model)
+                        except AttributeError:
+                            # Ignore sklearn_tags error
+                            pass
+
                         # Attempt prediction
                         predicted_return = model.predict(input_data)[0]
                         predictions[stock] = predicted_return
